@@ -13,7 +13,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 /**
- * An inner node of a B+ tree. Every inner node in a B+ tree of order d stores
+ * A inner node of a B+ tree. Every inner node in a B+ tree of order d stores
  * between d and 2d keys. An inner node with n keys stores n + 1 "pointers" to
  * children nodes (where a pointer is just a page number). Moreover, every
  * inner node is serialized and persisted on a single page; see toBytes and
