@@ -148,7 +148,7 @@ class LeafNode extends BPlusNode {
     public LeafNode get(DataBox key) {
         // TODO(proj2): implement
 
-        return null;
+        return this;
     }
 
     // See BPlusNode.getLeftmostLeaf.
@@ -156,7 +156,7 @@ class LeafNode extends BPlusNode {
     public LeafNode getLeftmostLeaf() {
         // TODO(proj2): implement
 
-        return null;
+        return this;
     }
 
     // See BPlusNode.put.
@@ -164,7 +164,37 @@ class LeafNode extends BPlusNode {
     public Optional<Pair<DataBox, Long>> put(DataBox key, RecordId rid) {
         // TODO(proj2): implement
 
-        return Optional.empty();
+        // First insert <key, rid>
+        int insertIndex = InnerNode.numLessThanEqual(key, keys);
+
+        if (insertIndex != 0 && key.compareTo(keys.get(insertIndex - 1)) == 0) {
+            throw new BPlusTreeException("Duplicate entries with the same key");
+        }
+
+        keys.add(insertIndex, key);
+        rids.add(insertIndex, rid);
+
+        // If no overflow, return Optional.empty()
+        if (keys.size() <= metadata.getOrder() * 2) {
+            sync();
+            return Optional.empty();
+        }
+
+        // Create a rightNode
+        List<DataBox> rightKeys = keys.subList(metadata.getOrder(), keys.size());
+        List<RecordId> rightRids = rids.subList(metadata.getOrder(), keys.size());
+        LeafNode rightNode = new LeafNode(metadata, bufferManager, rightKeys, rightRids, rightSibling, treeContext);
+
+        // Update the original leafNode
+        keys = keys.subList(0, metadata.getOrder());
+        rids = rids.subList(0, metadata.getOrder());
+        Long rightNodePageNum = rightNode.getPage().getPageNum();
+        rightSibling = Optional.of(rightNodePageNum);
+
+        // Sync these changes
+        sync();
+
+        return Optional.of(new Pair<>(rightKeys.get(0), rightNodePageNum));
     }
 
     // See BPlusNode.bulkLoad.
@@ -181,7 +211,16 @@ class LeafNode extends BPlusNode {
     public void remove(DataBox key) {
         // TODO(proj2): implement
 
-        return;
+        int index = keys.indexOf(key);
+
+        if (index < 0) {
+            return;
+        }
+
+        keys.remove(index);
+        rids.remove(index);
+
+        sync();
     }
 
     // Iterators ///////////////////////////////////////////////////////////////
