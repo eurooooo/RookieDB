@@ -149,7 +149,42 @@ class InnerNode extends BPlusNode {
             float fillFactor) {
         // TODO(proj2): implement
 
-        return Optional.empty();
+        int order = metadata.getOrder();
+
+        while (keys.size() <= order * 2) {
+            // There is no more data
+            if (!data.hasNext()) {
+                sync();
+                return Optional.empty();
+            }
+
+            // Bulkload the right most child
+            BPlusNode rightMostChild = getChild(children.size() - 1);
+            Optional<Pair<DataBox, Long>> pair = rightMostChild.bulkLoad(data, fillFactor);
+
+            // If no overflow in the child node
+            if (!pair.isPresent()) {
+                sync();
+                return Optional.empty();
+            }
+
+            keys.add(pair.get().getFirst());
+            children.add(pair.get().getSecond());
+        }
+
+        List<DataBox> rightKeys = keys.subList(order + 1, 2 * order + 1);
+        List<Long> rightChildren = children.subList(order + 1, 2 * order + 2);
+        InnerNode rightNode = new InnerNode(metadata, bufferManager, rightKeys, rightChildren, treeContext);
+        Long rightNodePageNum = rightNode.getPage().getPageNum();
+
+        DataBox splitKey = keys.get(order);
+        keys = keys.subList(0, order);
+        children = children.subList(0, order + 1);
+
+        // Sync these changes
+        sync();
+
+        return Optional.of(new Pair<>(splitKey, rightNodePageNum));
     }
 
     // See BPlusNode.remove.
