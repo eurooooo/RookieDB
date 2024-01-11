@@ -146,8 +146,9 @@ public class BPlusTree {
         LockUtil.ensureSufficientLockHeld(lockContext, LockType.NL);
 
         // TODO(proj2): implement
+        LeafNode leafNode = root.get(key);
 
-        return Optional.empty();
+        return leafNode.getKey(key);
     }
 
     /**
@@ -203,7 +204,7 @@ public class BPlusTree {
 
         // TODO(proj2): Return a BPlusTreeIterator.
 
-        return Collections.emptyIterator();
+        return new BPlusTreeIterator(root.getLeftmostLeaf());
     }
 
     /**
@@ -236,7 +237,7 @@ public class BPlusTree {
 
         // TODO(proj2): Return a BPlusTreeIterator.
 
-        return Collections.emptyIterator();
+        return new BPlusTreeIterator(root.get(key), key);
     }
 
     /**
@@ -257,8 +258,25 @@ public class BPlusTree {
         // Note: You should NOT update the root variable directly.
         // Use the provided updateRoot() helper method to change
         // the tree's root if the old root splits.
+        Optional<Pair<DataBox, Long>> pair = root.put(key, rid);
 
-        return;
+        if (!pair.isPresent()) {
+            return;
+        }
+
+        DataBox splitKey = pair.get().getFirst();
+        Long rightChild = pair.get().getSecond();
+
+        List<DataBox> keys = new ArrayList<>();
+        keys.add(splitKey);
+
+        List<Long> children = new ArrayList<>();
+        children.add(root.getPage().getPageNum());
+        children.add(rightChild);
+
+        BPlusNode newRoot = new InnerNode(metadata, bufferManager, keys, children, lockContext);
+
+        this.updateRoot(newRoot);
     }
 
     /**
@@ -289,7 +307,34 @@ public class BPlusTree {
         // Use the provided updateRoot() helper method to change
         // the tree's root if the old root splits.
 
-        return;
+        // First check the tree is empty
+        if (!(root instanceof LeafNode && ((LeafNode) root).getKeys().isEmpty())) {
+            throw new RuntimeException("The tree is not empty");
+        }
+
+        while (data.hasNext()) {
+            Optional<Pair<DataBox, Long>> pair = root.bulkLoad(data, fillFactor);
+
+            // RootNode does not split
+            if (!pair.isPresent()) {
+                return;
+            }
+
+            // RootNode split
+            DataBox splitKey = pair.get().getFirst();
+            Long rightChild = pair.get().getSecond();
+
+            List<DataBox> keys = new ArrayList<>();
+            keys.add(splitKey);
+
+            List<Long> children = new ArrayList<>();
+            children.add(root.getPage().getPageNum());
+            children.add(rightChild);
+
+            BPlusNode newRoot = new InnerNode(metadata, bufferManager, keys, children, lockContext);
+
+            this.updateRoot(newRoot);
+        }
     }
 
     /**
@@ -310,7 +355,7 @@ public class BPlusTree {
 
         // TODO(proj2): implement
 
-        return;
+        root.remove(key);
     }
 
     // Helpers /////////////////////////////////////////////////////////////////
@@ -423,19 +468,36 @@ public class BPlusTree {
     // Iterator ////////////////////////////////////////////////////////////////
     private class BPlusTreeIterator implements Iterator<RecordId> {
         // TODO(proj2): Add whatever fields and constructors you want here.
+        private LeafNode currentNode;
+        private Iterator<RecordId> currentIterator;
+
+        public BPlusTreeIterator(LeafNode startNode) {
+            currentNode = startNode;
+            currentIterator = startNode.scanAll();
+        }
+        public BPlusTreeIterator(LeafNode startNode, DataBox key) {
+            currentNode = startNode;
+            currentIterator = startNode.scanGreaterEqual(key);
+        }
 
         @Override
         public boolean hasNext() {
             // TODO(proj2): implement
-
-            return false;
+            return currentIterator.hasNext() || currentNode.getRightSibling().isPresent();
         }
 
         @Override
         public RecordId next() {
             // TODO(proj2): implement
-
-            throw new NoSuchElementException();
+            if (!hasNext()){
+                throw new NoSuchElementException();
+            }
+            if (currentIterator.hasNext()) {
+                return currentIterator.next();
+            }
+            currentNode = currentNode.getRightSibling().get();
+            currentIterator = currentNode.scanAll();
+            return currentIterator.next();
         }
     }
 }
